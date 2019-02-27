@@ -23,7 +23,7 @@
 
 ;; (push "~/src/screensaver.el" load-path)
 ;; (autoload 'screensaver-start "screensaver" nil t)
-
+;; (autoload 'screensaver-hide-and-start "screensaver" nil t)
 
 ;; (screensaver-start 300 (lambda (seconds) (unless seconds (screensaver-display-image "/music/repository/Four Tet/New Energy/sleeve.jpg"))))
 
@@ -32,6 +32,15 @@
 (defvar screensaver--timer nil)
 (defvar screensaver--timeout (* 5 60))
 (defvar screensaver--action nil)
+
+(defun screensaver-hide-and-start (&optional timeout action)
+  "Like `screensaver-start', but hide the selected frame first."
+  (let ((frame (selected-frame)))
+    (make-frame-invisible frame t)
+    (set-frame-width frame 0 nil t)
+    (set-frame-height frame 0 nil t)
+    (set-frame-position (selected-frame) -200 -200))
+  (screensaver-start timeout action))
 
 (defun screensaver-start (&optional timeout action)
   "Start saving the screen after TIMEOUT seconds.
@@ -108,7 +117,8 @@ a blank Emacs frame."
       (screensaver-stop)
       (screensaver--schedule)
       (when selected
-	(select-frame-set-input-focus selected)))))
+	(select-frame-set-input-focus selected))
+      (make-frame-invisible (selected-frame) t))))
 
 (defun screensaver-display-image (file)
   "Example action that can be performed when the screensaver activates."
