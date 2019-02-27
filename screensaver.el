@@ -21,7 +21,11 @@
 
 ;;; Commentary:
 
-;; (screensaver-start 300 (lambda () (screensaver-display-image "/music/repository/Four Tet/New Energy/sleeve.jpg")))
+;; (push "~/src/screensaver.el" load-path)
+;; (autoload 'screensaver-start "screensaver" nil t)
+
+
+;; (screensaver-start 300 (lambda (seconds) (unless seconds (screensaver-display-image "/music/repository/Four Tet/New Energy/sleeve.jpg"))))
 
 ;;; Code:
 
@@ -89,13 +93,15 @@ a blank Emacs frame."
       (erase-buffer)
       (setq mode-line-format nil)
       (when screensaver--action
-	(funcall screensaver--action))
+	(funcall screensaver--action nil))
       ;; Wait until we get some event (mouse movement, keyboard
       ;; action), but ignore events the first second, because popping
       ;; up frames and stuff generates events, apparently.
       (let ((start (float-time)))
-	(while (< (- (float-time) start) 1)
-	  (track-mouse (read-event ""))))
+	(while (or (null (track-mouse (read-event "" 5)))
+		   (< (- (float-time) start) 1))
+	  (when (> (- (float-time) start) 1)
+	    (funcall screensaver--action (- (float-time) start)))))
       ;; Restore the old setup.
       (delete-frame frame)
       (kill-buffer buffer)
