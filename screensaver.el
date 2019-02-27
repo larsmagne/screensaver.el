@@ -32,6 +32,7 @@
 (defvar screensaver--timer nil)
 (defvar screensaver--timeout (* 5 60))
 (defvar screensaver--action nil)
+(defvar screensaver--hidden nil)
 
 (defun screensaver-hide-and-start (&optional timeout action)
   "Like `screensaver-start', but hide the selected frame first."
@@ -40,6 +41,7 @@
     (set-frame-width frame 0 nil t)
     (set-frame-height frame 0 nil t)
     (set-frame-position (selected-frame) -200 -200))
+  (setq screensaver--hidden t)
   (screensaver-start timeout action))
 
 (defun screensaver-start (&optional timeout action)
@@ -116,9 +118,10 @@ a blank Emacs frame."
       (kill-buffer buffer)
       (screensaver-stop)
       (screensaver--schedule)
-      (when selected
-	(select-frame-set-input-focus selected))
-      (make-frame-invisible (selected-frame) t))))
+      (if screensaver--hidden
+	  (make-frame-invisible (selected-frame) t)
+	(when selected
+	  (select-frame-set-input-focus selected))))))
 
 (defun screensaver-display-image (file)
   "Example action that can be performed when the screensaver activates."
