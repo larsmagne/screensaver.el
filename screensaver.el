@@ -21,6 +21,8 @@
 
 ;;; Commentary:
 
+;; (screensaver-start 300 (lambda () (screensaver-display-image "/music/repository/Four Tet/New Energy/sleeve.jpg")))
+
 ;;; Code:
 
 (defvar screensaver--timer nil)
@@ -63,8 +65,7 @@ a blank Emacs frame."
 	  (screensaver--activate))
       (setq screensaver--timer
 	    (run-at-time (- screensaver--timeout (/ idle 1000)) nil
-			 (lambda ()
-			   (screensaver--schedule)))))))
+			 'screensaver--schedule)))))
 
 (defun screensaver--activate ()
   (let ((selected (selected-frame))
@@ -76,19 +77,56 @@ a blank Emacs frame."
 	    (width . 400)
 	    (height . 200)
 	    (user-position . t)
-	    (background-color . "blue")
-	    (vertical-scroll-bars . nil)))))
+	    (background-color . "black")
+	    (vertical-scroll-bars . nil)
+	    (minibuffer . nil)
+	    (horizontal-scroll-bars . nil)))))
+    (set-frame-width frame (x-display-pixel-width) nil t)
+    (set-frame-height frame (x-display-pixel-height) nil t)
     (select-frame-set-input-focus frame)
     (let ((buffer (switch-to-buffer "*screensaver*")))
+      (setq truncate-lines t)
       (erase-buffer)
+      (setq mode-line-format nil)
       (when screensaver--action
 	(funcall screensaver--action))
-      ;; Wait until we get some event (mouse movement, keyboard action).
-      (track-mouse (read-event))
+      ;; Wait until we get some event (mouse movement, keyboard
+      ;; action), but ignore events the first second, because popping
+      ;; up frames and stuff generates events, apparently.
+      (let ((start (float-time)))
+	(while (< (- (float-time) start) 1)
+	  (track-mouse (read-event ""))))
+      ;; Restore the old setup.
       (delete-frame frame)
       (kill-buffer buffer)
+      (screensaver-stop)
       (screensaver--schedule)
-      (select-frame-set-input-focus selected))))
+      (when selected
+	(select-frame-set-input-focus selected)))))
+
+(defun screensaver-display-image (file)
+  "Example action that can be performed when the screensaver activates."
+  (let* ((window-height (window-size nil nil t))
+	 (window-width (min (window-size nil t t)
+			    (x-display-pixel-width)))
+	 (svg (svg-create window-width window-height))
+	 (image-size (image-size (create-image file) t))
+	 ;; Fit the image to the window.
+	 (image-height window-height)
+	 (image-width (* (car image-size)
+			 (/ window-height (float (cdr image-size))))))
+    (when (> image-width window-width)
+      (setq image-width window-width
+	    image-height (* (cdr image-size)
+			    (/ window-width (float (car image-size))))))
+    (svg-rectangle svg 0 0 window-width window-height
+		   :fill "#000000")
+    (svg-embed svg file (mailcap-file-name-to-mime-type file) nil
+	       :y (/ (- window-height image-height) 2)
+	       :x (/ (- window-width image-width) 2)
+	       :width image-width
+	       :height image-height)
+    (insert-image (svg-image svg))))
 
 (provide 'screensaver)
 
