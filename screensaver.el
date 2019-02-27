@@ -51,6 +51,8 @@ a blank Emacs frame."
   (interactive)
   (unless (executable-find "xssstate")
     (error "The xssstate executable is not installed on this system"))
+  (unless (executable-find "xdotool")
+    (error "The xdotool executable is not installed on this system"))
   (screensaver-stop)
   (when timeout
     (setq screensaver--timeout timeout))
@@ -82,8 +84,19 @@ a blank Emacs frame."
 	    (run-at-time (- screensaver--timeout (/ idle 1000)) nil
 			 'screensaver--schedule)))))
 
+(defun screensaver--get-active-window ()
+  (with-temp-buffer
+    (call-process "xdotool" nil t nil "getwindowfocus")
+    (goto-char (point-min))
+    (buffer-substring (point) (line-end-position))))
+
+(defun screensaver--set-active-window (id)
+  (with-temp-buffer
+    (call-process "xdotool" nil t nil "windowfocus" id)))
+
 (defun screensaver--activate ()
-  (let ((selected (selected-frame))
+  (let ((active-window (screensaver--get-active-window))
+	(selected (selected-frame))
 	(frame
 	 (make-frame
 	  `((title . "Screensaver")
@@ -119,7 +132,9 @@ a blank Emacs frame."
       (screensaver-stop)
       (screensaver--schedule)
       (if screensaver--hidden
-	  (make-frame-invisible (selected-frame) t)
+	  (progn
+	    (make-frame-invisible (selected-frame) t)
+	    (screensaver--set-active-window active-window))
 	(when selected
 	  (select-frame-set-input-focus selected))))))
 
