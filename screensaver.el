@@ -212,7 +212,7 @@ and the function is free to do whatever it wants in that buffer."
        (screensaver--error (car err))))))
 
 (defun screensaver--error (error)
-  (loop for slot in (object-slots error)
+  (loop for slot in (eieio-class-slots error)
 	collect (cons slot (slot-value error slot))))
 
 (provide 'screensaver)
