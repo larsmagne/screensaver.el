@@ -77,7 +77,7 @@ and the function is free to do whatever it wants in that buffer."
   (when timeout
     (setq screensaver--timeout timeout))
   (setq screensaver--action action)
-  (setq screensaver-timer (screensaver--schedule)))
+  (setq screensaver--timer (screensaver--schedule)))
 
 (defun screensaver-stop ()
   "Stop saving the screen."
