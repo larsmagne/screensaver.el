@@ -29,6 +29,8 @@
 
 ;;; Code:
 
+(require 'xcb)
+(require 'xcb-screensaver)
 (defvar screensaver--timer nil)
 (defvar screensaver--timeout (* 5 60))
 (defvar screensaver--action nil)
@@ -122,7 +124,7 @@ a blank Emacs frame."
       ;; action), but ignore events the first second, because popping
       ;; up frames and stuff generates events, apparently.
       (let ((start (float-time)))
-	(while (or (null (track-mouse (read-event "" 5)))
+	(while (or (null (track-mouse (read-event "" nil 5)))
 		   (< (- (float-time) start) 1))
 	  (when (> (- (float-time) start) 1)
 	    (funcall screensaver--action (- (float-time) start)))))
@@ -140,7 +142,8 @@ a blank Emacs frame."
 
 (defun screensaver-display-image (file)
   "Example action that can be performed when the screensaver activates."
-  (let* ((window-height (window-size nil nil t))
+  (let* ((window-height (min (window-size nil nil t)
+			     (x-display-pixel-height)))
 	 (window-width (min (window-size nil t t)
 			    (x-display-pixel-width)))
 	 (svg (svg-create window-width window-height))
@@ -161,6 +164,46 @@ a blank Emacs frame."
 	       :width image-width
 	       :height image-height)
     (insert-image (svg-image svg))))
+
+(defun screensaver--get-idle ()
+  (let* ((x (xcb:connect ":0"))
+	 (root (slot-value (car (slot-value (xcb:get-setup x) 'roots))
+                           'root)))    
+    (when (zerop (slot-value (xcb:get-extension-data x 'xcb:screensaver)
+			     'present))
+      (error "No screensaver present in the X server"))
+    (prog1
+	(destructuring-bind (res err)
+	    (xcb:+request+reply x
+               (make-instance 'xcb:screensaver:QueryInfo
+			      :drawable root))
+	  (if res
+	      (list :idle (slot-value res 'ms-since-user-input))
+	    (screensaver--error (car err))))
+      (xcb:disconnect x))))
+
+(defun screensaver--error (error)
+  (loop for slot in (object-slots error)
+	collect (cons slot (slot-value error slot))))
+
+(defun screensaver--lock (x root)
+  "Lock (disable all events)."
+  (xcb:+request x
+      (make-instance 'xcb:ChangeWindowAttributes
+                     :window root
+                     :value-mask xcb:CW:EventMask
+                     :event-mask xcb:EventMask:NoEvent))
+  (xcb:flush x))
+
+(defun screensaver--unlock (x root)
+  "Unlock (enable all events)."
+  (xcb:+request x
+      (make-instance 'xcb:ChangeWindowAttributes
+                     :window root
+                     :value-mask xcb:CW:EventMask
+                     :event-mask (logior xcb:EventMask:SubstructureRedirect
+                                         xcb:EventMask:StructureNotify)))
+  (xcb:flush x))
 
 (provide 'screensaver)
 
