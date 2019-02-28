@@ -30,6 +30,17 @@
 
 ;; (screensaver-start 300 (lambda (seconds) (unless seconds (screensaver-display-image "/music/repository/Four Tet/New Energy/sleeve.jpg"))))
 
+;; To start from the command line, you'd typically say something like:
+;;
+;; $ emacs --funcall screensaver-hide-and-start
+;;
+;; which will start a normal Emacs frame and then hide it. 
+;;
+;; $ emacs --eval "(screensaver-hide-and-start 60 'my-display-function)"
+;;
+;; to make it trigger after 60 seconds and call the function mentioned
+;; to screensave.
+
 ;;; Code:
 
 (require 'xcb)
@@ -53,7 +64,14 @@
 (defun screensaver-start (&optional timeout action)
   "Start saving the screen after TIMEOUT seconds.
 Perform ACTION when saving the screen.  The default is to display
-a blank Emacs frame."
+a blank Emacs frame.
+
+ACTION should be a function that takes a single parameter.  When
+TIMEOUT has passed, the function is called with nil as the
+parameter, and it will then be called about every five seconds
+with the number of elapsed seconds as the parameter.  The
+function is called in the buffer that's displayed on the screen,
+and the function is free to do whatever it wants in that buffer."
   (interactive)
   (screensaver-stop)
   (when timeout
