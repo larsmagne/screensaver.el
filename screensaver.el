@@ -51,8 +51,6 @@
 Perform ACTION when saving the screen.  The default is to display
 a blank Emacs frame."
   (interactive)
-  (unless (executable-find "xssstate")
-    (error "The xssstate executable is not installed on this system"))
   (unless (executable-find "xdotool")
     (error "The xdotool executable is not installed on this system"))
   (screensaver-stop)
@@ -75,9 +73,7 @@ a blank Emacs frame."
 
 (defun screensaver--schedule ()
   "Compute the first likely time that screen saving can happen."
-  (let ((idle (with-temp-buffer
-		(call-process "xssstate" nil t nil "-i")
-		(string-to-number (buffer-string)))))
+  (let ((idle (plist-get (screensaver--get-idle) :idle)))
     (if (>= (/ idle 1000) screensaver--timeout)
 	;; We've already been activated.
 	(unless (get-buffer "*screensaver*")
