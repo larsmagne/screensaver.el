@@ -118,8 +118,37 @@ and the function is free to do whatever it wants in that buffer."
        (xcb:+request+reply x
 	   (make-instance 'xcb:GetInputFocus))
      (if res
-	 (slot-value res 'focus)
+	 (screensaver--find-real-window x (slot-value res 'focus))
        (screensaver--error (car err))))))
+
+(defun screensaver--find-real-window (x id)
+  "Return ID if it's a real window, or the first parent it finds that's real."
+  (if (screensaver--real-window-p x id)
+      id
+    (let ((parent
+	   (slot-value
+	    (xcb:+request-unchecked+reply x
+		(make-instance 'xcb:QueryTree
+			       :window id))
+	    'parent)))
+      (if parent
+	  (screensaver--find-real-window x parent)
+	id))))
+
+(defun screensaver--real-window-p (x id)
+  "Determine if ID is a real window based on whether it has a WM_CLASS."
+  (plusp
+   (length
+    (slot-value
+     (xcb:+request-unchecked+reply x
+	 (make-instance 'xcb:GetProperty
+			:delete 0
+			:window id
+			:type xcb:Atom:STRING
+			:property xcb:Atom:WM_CLASS
+			:long-length 256
+			:long-offset 0))
+     'value))))
 
 (defun screensaver--set-active-window (id)
   (screensaver--with-x
