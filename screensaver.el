@@ -82,31 +82,36 @@ a blank Emacs frame."
 	    (run-at-time (- screensaver--timeout (/ idle 1000)) nil
 			 'screensaver--schedule)))))
 
+(defmacro screensaver--with-x (&rest body)
+  `(let* ((x (xcb:connect ":0"))
+	  (root (slot-value (car (slot-value (xcb:get-setup x) 'roots))
+                            'root)))
+     (unwind-protect
+	 (progn
+	   ,@body)
+       (xcb:flush x)
+       (xcb:disconnect x))))
+
 (defun screensaver--get-active-window ()
-  (let* ((x (xcb:connect ":0")))
-    (prog1
-	(destructuring-bind (res err)
-	    (xcb:+request+reply x
-		(make-instance 'xcb:GetInputFocus))
-	  (if res
-	      (slot-value res 'focus)
-	    (screensaver--error (car err))))
-      (xcb:disconnect x))))
+  (screensaver--with-x
+   (destructuring-bind (res err)
+       (xcb:+request+reply x
+	   (make-instance 'xcb:GetInputFocus))
+     (if res
+	 (slot-value res 'focus)
+       (screensaver--error (car err))))))
 
 (defun screensaver--set-active-window (id)
   (with-temp-buffer
     (call-process "xdotool" nil t nil "windowfocus" (format "%s" id))))
 
 (defun screensaver--set-active-window-new (id)
-  (let ((x (xcb:connect ":0")))
-    (prog1
-	(xcb:+request x
-            (make-instance 'xcb:SetInputFocus
-			   :revert-to xcb:InputFocus:Parent
-			   :focus id
-			   :time xcb:Time:CurrentTime))
-      (xcb:flush x)
-      (xcb:disconnect x))))
+  (screensaver--with-x
+   (xcb:+request x
+       (make-instance 'xcb:SetInputFocus
+		      :revert-to xcb:InputFocus:Parent
+		      :focus id
+		      :time xcb:Time:CurrentTime))))
 
 (defun screensaver--activate ()
   (let ((active-window (screensaver--get-active-window))
@@ -178,21 +183,17 @@ a blank Emacs frame."
     (insert-image (svg-image svg))))
 
 (defun screensaver--get-idle ()
-  (let* ((x (xcb:connect ":0"))
-	 (root (slot-value (car (slot-value (xcb:get-setup x) 'roots))
-                           'root)))    
-    (when (zerop (slot-value (xcb:get-extension-data x 'xcb:screensaver)
-			     'present))
-      (error "No screensaver present in the X server"))
-    (prog1
-	(destructuring-bind (res err)
-	    (xcb:+request+reply x
-               (make-instance 'xcb:screensaver:QueryInfo
-			      :drawable root))
-	  (if res
-	      (list :idle (slot-value res 'ms-since-user-input))
-	    (screensaver--error (car err))))
-      (xcb:disconnect x))))
+  (screensaver--with-x
+   (when (zerop (slot-value (xcb:get-extension-data x 'xcb:screensaver)
+			    'present))
+     (error "No screensaver present in the X server"))
+   (destructuring-bind (res err)
+       (xcb:+request+reply x
+           (make-instance 'xcb:screensaver:QueryInfo
+			  :drawable root))
+     (if res
+	 (list :idle (slot-value res 'ms-since-user-input))
+       (screensaver--error (car err))))))
 
 (defun screensaver--error (error)
   (loop for slot in (object-slots error)
