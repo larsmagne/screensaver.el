@@ -83,14 +83,30 @@ a blank Emacs frame."
 			 'screensaver--schedule)))))
 
 (defun screensaver--get-active-window ()
-  (with-temp-buffer
-    (call-process "xdotool" nil t nil "getwindowfocus")
-    (goto-char (point-min))
-    (buffer-substring (point) (line-end-position))))
+  (let* ((x (xcb:connect ":0")))
+    (prog1
+	(destructuring-bind (res err)
+	    (xcb:+request+reply x
+		(make-instance 'xcb:GetInputFocus))
+	  (if res
+	      (slot-value res 'focus)
+	    (screensaver--error (car err))))
+      (xcb:disconnect x))))
 
 (defun screensaver--set-active-window (id)
   (with-temp-buffer
-    (call-process "xdotool" nil t nil "windowfocus" id)))
+    (call-process "xdotool" nil t nil "windowfocus" (format "%s" id))))
+
+(defun screensaver--set-active-window-new (id)
+  (let ((x (xcb:connect ":0")))
+    (prog1
+	(xcb:+request x
+            (make-instance 'xcb:SetInputFocus
+			   :revert-to xcb:InputFocus:Parent
+			   :focus id
+			   :time xcb:Time:CurrentTime))
+      (xcb:flush x)
+      (xcb:disconnect x))))
 
 (defun screensaver--activate ()
   (let ((active-window (screensaver--get-active-window))
