@@ -21,6 +21,9 @@
 
 ;;; Commentary:
 
+;; This package requires the xelb library to talk to X:
+;; git clone https://github.com/ch11ng/xelb.git
+
 ;; (push "~/src/screensaver.el" load-path)
 ;; (autoload 'screensaver-start "screensaver" nil t)
 ;; (autoload 'screensaver-hide-and-start "screensaver" nil t)
@@ -31,6 +34,7 @@
 
 (require 'xcb)
 (require 'xcb-screensaver)
+
 (defvar screensaver--timer nil)
 (defvar screensaver--timeout (* 5 60))
 (defvar screensaver--action nil)
@@ -192,25 +196,6 @@ a blank Emacs frame."
 (defun screensaver--error (error)
   (loop for slot in (object-slots error)
 	collect (cons slot (slot-value error slot))))
-
-(defun screensaver--lock (x root)
-  "Lock (disable all events)."
-  (xcb:+request x
-      (make-instance 'xcb:ChangeWindowAttributes
-                     :window root
-                     :value-mask xcb:CW:EventMask
-                     :event-mask xcb:EventMask:NoEvent))
-  (xcb:flush x))
-
-(defun screensaver--unlock (x root)
-  "Unlock (enable all events)."
-  (xcb:+request x
-      (make-instance 'xcb:ChangeWindowAttributes
-                     :window root
-                     :value-mask xcb:CW:EventMask
-                     :event-mask (logior xcb:EventMask:SubstructureRedirect
-                                         xcb:EventMask:StructureNotify)))
-  (xcb:flush x))
 
 (provide 'screensaver)
 
