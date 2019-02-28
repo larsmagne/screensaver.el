@@ -51,8 +51,6 @@
 Perform ACTION when saving the screen.  The default is to display
 a blank Emacs frame."
   (interactive)
-  (unless (executable-find "xdotool")
-    (error "The xdotool executable is not installed on this system"))
   (screensaver-stop)
   (when timeout
     (setq screensaver--timeout timeout))
@@ -102,10 +100,6 @@ a blank Emacs frame."
        (screensaver--error (car err))))))
 
 (defun screensaver--set-active-window (id)
-  (with-temp-buffer
-    (call-process "xdotool" nil t nil "windowfocus" (format "%s" id))))
-
-(defun screensaver--set-active-window-new (id)
   (screensaver--with-x
    (xcb:+request x
        (make-instance 'xcb:SetInputFocus
