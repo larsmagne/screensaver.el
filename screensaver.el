@@ -382,11 +382,6 @@ and the function is free to do whatever it wants in that buffer."
     (xcb:flush x)
     id))
 
-;; (progn (setq x (xcb:connect ":0")) (xcb:ewmh:init x t) (setq id (screensaver--make-window x)) (screensaver--get-events x) (screensaver--setup-expose x id) nil)
-;; (screensaver--setup-expose x id)
-;; (progn (sleep-for 5) (foo id) (sleep-for 10) (unlock))
-;; (xcb:disconnect x)
-
 (provide 'screensaver)
 
 ;;; screensaver.el ends here
