@@ -46,6 +46,7 @@
 (require 'xcb)
 (require 'xcb-screensaver)
 (require 'xcb-ewmh)
+(require 'color)
 
 (defvar screensaver--timer nil)
 (defvar screensaver--timeout (* 5 60))
