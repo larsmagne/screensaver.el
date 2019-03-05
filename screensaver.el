@@ -41,6 +41,9 @@
 ;; to make it trigger after 60 seconds and call the function mentioned
 ;; to screensave.
 
+;; The xcb window manipulation stuff was cribbed from
+;; https://github.com/Vannil/cheerilee.el
+
 ;;; Code:
 
 (require 'xcb)
