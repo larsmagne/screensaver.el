@@ -72,7 +72,9 @@ TIMEOUT has passed, the function is called with nil as the
 parameter, and it will then be called about every five seconds
 with the number of elapsed seconds as the parameter.  The
 function is called in the buffer that's displayed on the screen,
-and the function is free to do whatever it wants in that buffer."
+and the function is free to do whatever it wants in that buffer.
+
+The function should return non-nil if it changed anything."
   (interactive)
   (screensaver-stop)
   (when timeout
@@ -205,20 +207,14 @@ and the function is free to do whatever it wants in that buffer."
 		  (when (and (> (- (float-time) start) 1)
 			     (not resized))
 		    (setq resized t)
-		    (xcb:-+request
-		     x
-		     (make-instance 'xcb:ConfigureWindow
-				    :window id
-				    :value-mask (logior xcb:ConfigWindow:Width
-							xcb:ConfigWindow:Height)
-				    :width (+ (x-display-pixel-width) 100)
-				    :height (+ (x-display-pixel-height) 100)))
-		    (xcb:flush x))
+		    (screensaver--resize x id))
 		  (sleep-for 0.1)
 		  ;; Allow updating every fifth second.
 		  (when (and (> (- (float-time) start) 1)
 			     (zerop (mod (incf times) 50)))
-		    (funcall screensaver--action (- (float-time) start))))))
+		    (when (funcall screensaver--action (- (float-time) start))
+		      (screensaver--resize x id 100 100)
+		      (screensaver--resize x id))))))
 	  (xcb:disconnect x)))
       ;; Restore the old setup.
       (delete-frame frame)
@@ -231,6 +227,20 @@ and the function is free to do whatever it wants in that buffer."
 	    (screensaver--set-active-window active-window))
 	(when selected
 	  (select-frame-set-input-focus selected))))))
+
+(defun screensaver--resize (x id &optional width height)
+  (unless (numberp width)
+    (setq width (+ (x-display-pixel-width) 100)
+	  height (+ (x-display-pixel-height) 100)))
+  (xcb:-+request
+   x
+   (make-instance 'xcb:ConfigureWindow
+		  :window id
+		  :value-mask (logior xcb:ConfigWindow:Width
+				      xcb:ConfigWindow:Height)
+		  :width width
+		  :height height))
+  (xcb:flush x))
 
 (defun screensaver-display-image (file)
   "Example action that can be performed when the screensaver activates."
