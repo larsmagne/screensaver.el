@@ -192,19 +192,32 @@ The function should return non-nil if it changed anything."
 	(unwind-protect
 	    (progn
 	      (setq x (xcb:connect ":0"))
+	      ;; Probably not necessary to initialise the extended
+	      ;; window manager hints, but be future-proof.  Ish.
 	      (xcb:ewmh:init x t)
 	      ;; Put a transparent window on top of the Emacs frame.
+	      ;; The reason for the resizing stuff further down is
+	      ;; that Emacs believes that it's totally hidden behind
+	      ;; this window (which it is), but it's transparent, so
+	      ;; you can see the Emacs frame.  By resizing the
+	      ;; transparent window, we force Emacs do to a redisplay.
+	      ;; All the Emacs-native "refresh" functions I tried did
+	      ;; nothing.
 	      (let ((id (screensaver--make-window x))
 		    (event-triggered nil))
 		(screensaver--set-active-window id)
 		(dolist (event '(xcb:ButtonPress
 				 xcb:MotionNotify
 				 xcb:KeyPress))
-		  ;; Stop saving the screen when something happens.
+		  ;; Register event handling on this window to stop
+		  ;; saving the screen when something happens (button
+		  ;; presses, mouse moves and key presses).
 		  (xcb:+event x event
 			      (lambda (&rest _)
 				(setq event-triggered t))))
 		(while (not event-triggered)
+		  ;; First time through, resize the overlay to occupy
+		  ;; the entire screen.
 		  (when (and (> (- (float-time) start) 1)
 			     (not resized))
 		    (setq resized t)
@@ -306,12 +319,13 @@ The function should return non-nil if it changed anything."
 	       (/ (nth 2 color) (nth 2 white)))))
     (string-to-number (substring hex 1) 16)))
 
+;; If we want the xcd window to be visible, we do the drawing of the
+;; data from this event.
 (defun screensaver--setup-expose (x id)
   (xcb:+event x 'xcb:Expose (lambda (&rest _)
 			      (screensaver--draw x id))))
 
 (defun screensaver--draw (x window)
-  (message "%s Got exposed" id)
   (let ((gid (xcb:generate-id x)))
     (xcb:-+request
      x
@@ -326,6 +340,8 @@ The function should return non-nil if it changed anything."
 		    :background 0
 		    :line-width 10
 		    :graphics-exposures xcb:GX:clear))
+    ;; Example drawing we could be doing, but we'd probably do
+    ;; something else here...
     (xcb:-+request
      x
      (make-instance 'xcb:PolyFillRectangle
@@ -341,56 +357,61 @@ The function should return non-nil if it changed anything."
     (xcb:flush x)))
 
 (defun screensaver--make-window (x)
+  "Create the window that'll get the events from X."
   (let ((root (slot-value (car (slot-value (xcb:get-setup x) 'roots))
                           'root))
 	(id (xcb:generate-id x))
-	(n "test"))
+	(name "Screensaver Layer"))
     (xcb:-+request
-     x
-     (make-instance 'xcb:CreateWindow
-		    :depth xcb:WindowClass:CopyFromParent
-		    :wid id
-		    :parent root
-		    :x 0
-		    :y 0
-		    :width 100
-		    :height 100
-		    :border-width 1
-		    :class xcb:WindowClass:InputOutput
-		    :visual 0
-		    :value-mask (logior xcb:CW:EventMask
-					;;xcb:CW:BackPixel
-					)
-		    :event-mask (logior xcb:EventMask:Exposure
-					xcb:EventMask:ButtonPress
-					xcb:EventMask:ButtonRelease
-					xcb:EventMask:StructureNotify
-					xcb:EventMask:PointerMotion
-					xcb:EventMask:KeyPress
-					xcb:EventMask:KeyRelease)
-		    :background-pixel (screensaver--get-color "blue")
-		    :override-redirect 0))
-    (xcb:-+request
-     x
-     (make-instance 'xcb:ChangeProperty
-		    :mode xcb:PropMode:Replace
-		    :window id
-		    :property xcb:Atom:WM_NAME
-		    :type xcb:Atom:STRING
-		    :format 8
-		    :data-len (length n)
-		    :data n))
-    (xcb:-+request x
-        (make-instance 'xcb:MapWindow :window id))
-    (xcb:-+request
-     x
-     (make-instance 'xcb:ConfigureWindow
-                    :window id
-                    :value-mask (logior xcb:ConfigWindow:X
-					xcb:ConfigWindow:Y)
-		    :x -100
-		    :y -100))
+     x (make-instance 'xcb:CreateWindow
+		      :depth xcb:WindowClass:CopyFromParent
+		      :wid id
+		      :parent root
+		      :x 0
+		      :y 0
+		      :width 100
+		      :height 100
+		      :border-width 1
+		      :class xcb:WindowClass:InputOutput
+		      :visual 0
+		      :value-mask (logior xcb:CW:EventMask
+					  ;; Without the following mask,
+					  ;;the background of the window
+					  ;;will be blank (transparent).
+					  ;;xcb:CW:BackPixel
+					  )
+		      :event-mask (logior xcb:EventMask:Exposure
+					  xcb:EventMask:ButtonPress
+					  xcb:EventMask:ButtonRelease
+					  xcb:EventMask:StructureNotify
+					  xcb:EventMask:PointerMotion
+					  xcb:EventMask:KeyPress
+					  xcb:EventMask:KeyRelease)
+		      :background-pixel (screensaver--get-color "blue")
+		      :override-redirect 0))
+    ;; Give the window a name (not really necessary).
+    (xcb:-+request x (make-instance 'xcb:ChangeProperty
+				    :mode xcb:PropMode:Replace
+				    :window id
+				    :property xcb:Atom:WM_NAME
+				    :type xcb:Atom:STRING
+				    :format 8
+				    :data-len (length name)
+				    :data name))
+    ;; Display the window on the screen.
+    (xcb:-+request x (make-instance 'xcb:MapWindow :window id))
+    ;; My window manager overrides the x/y hints when creating the
+    ;; window, so just move it.
+    (xcb:-+request x (make-instance 'xcb:ConfigureWindow
+				    :window id
+				    :value-mask (logior xcb:ConfigWindow:X
+							xcb:ConfigWindow:Y)
+				    :x -100
+				    :y -100))
+    ;; Flush all the commands, which will make X actually do the
+    ;; preceding actions.
     (xcb:flush x)
+    ;; Return the window id.
     id))
 
 (provide 'screensaver)
