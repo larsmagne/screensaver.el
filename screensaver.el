@@ -45,6 +45,7 @@
 
 (require 'xcb)
 (require 'xcb-screensaver)
+(require 'xcb-ewmh)
 
 (defvar screensaver--timer nil)
 (defvar screensaver--timeout (* 5 60))
@@ -241,8 +242,65 @@ and the function is free to do whatever it wants in that buffer."
        (screensaver--error (car err))))))
 
 (defun screensaver--error (error)
-  (loop for slot in (eieio-class-slots error)
+  (loop for slot in (object-slots error)
 	collect (cons slot (slot-value error slot))))
+
+(defun screensaver--get-events (x)
+  (xcb:+event x 'xcb:ButtonPress
+	      (lambda (a b)
+		(message "%s %s" a b)))
+  (xcb:+event x 'xcb:MotionNotify
+	      (lambda (a b)
+		(message "%s %s" a b)))
+  (xcb:+event x 'xcb:KeyPress
+	      (lambda (a b)
+		(message "%s %s" a b))))
+
+(defun screensaver--make-window ()
+  (let ((root (slot-value (car (slot-value (xcb:get-setup x) 'roots))
+                          'root))
+	(id (xcb:generate-id x))
+	(n "test"))
+    (xcb:-+request
+     x
+     (make-instance 'xcb:CreateWindow
+		    :depth xcb:WindowClass:CopyFromParent
+		    :wid id
+		    :parent root
+		    :x 100
+		    :y 100
+		    :width 500
+		    :height 500
+		    :border-width 1
+		    :class xcb:WindowClass:InputOutput
+		    :visual 0
+		    :value-mask (logior xcb:CW:EventMask)
+		    :event-mask (logior xcb:EventMask:Exposure
+					xcb:EventMask:ButtonPress
+					xcb:EventMask:ButtonRelease
+					xcb:EventMask:StructureNotify
+					xcb:EventMask:PointerMotion
+					xcb:EventMask:KeyPress
+					xcb:EventMask:KeyRelease)
+		    :override-redirect 0))
+    (xcb:-+request
+     x
+     (make-instance 'xcb:ChangeProperty
+		    :mode xcb:PropMode:Replace
+		    :window id
+		    :property xcb:Atom:WM_NAME
+		    :type xcb:Atom:STRING
+		    :format 8
+		    :data-len (length n)
+		    :data n))
+    (xcb:+request x
+        (make-instance 'xcb:MapWindow :window id))
+    (xcb:flush x)
+    id))
+
+;; (progn (setq x (xcb:connect ":0")) (xcb:ewmh:init x t) (setq id (wmsn-acquire)) (screensaver--get-event))
+;; (progn (sleep-for 5) (foo id) (sleep-for 10) (unlock))
+;; (xcb:disconnect x)
 
 (provide 'screensaver)
 
