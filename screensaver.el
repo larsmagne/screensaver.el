@@ -183,14 +183,43 @@ and the function is free to do whatever it wants in that buffer."
       (setq mode-line-format nil)
       (when screensaver--action
 	(funcall screensaver--action nil))
-      ;; Wait until we get some event (mouse movement, keyboard
-      ;; action), but ignore events the first second, because popping
-      ;; up frames and stuff generates events, apparently.
-      (let ((start (float-time)))
-	(while (or (null (track-mouse (read-event "" nil 5)))
-		   (< (- (float-time) start) 1))
-	  (when (> (- (float-time) start) 1)
-	    (funcall screensaver--action (- (float-time) start)))))
+      (let ((start (float-time))
+	    (times 0)
+	    x resized)
+	(unwind-protect
+	    (progn
+	      (setq x (xcb:connect ":0"))
+	      (xcb:ewmh:init x t)
+	      ;; Put a transparent window on top of the Emacs frame.
+	      (let ((id (screensaver--make-window x))
+		    (event-triggered nil))
+		(screensaver--set-active-window id)
+		(dolist (event '(xcb:ButtonPress
+				 xcb:MotionNotify
+				 xcb:KeyPress))
+		  ;; Stop saving the screen when something happens.
+		  (xcb:+event x event
+			      (lambda (&rest _)
+				(setq event-triggered t))))
+		(while (not event-triggered)
+		  (when (and (> (- (float-time) start) 1)
+			     (not resized))
+		    (setq resized t)
+		    (xcb:-+request
+		     x
+		     (make-instance 'xcb:ConfigureWindow
+				    :window id
+				    :value-mask (logior xcb:ConfigWindow:Width
+							xcb:ConfigWindow:Height)
+				    :width (+ (x-display-pixel-width) 100)
+				    :height (+ (x-display-pixel-height) 100)))
+		    (xcb:flush x))
+		  (sleep-for 0.1)
+		  ;; Allow updating every fifth second.
+		  (when (and (> (- (float-time) start) 1)
+			     (zerop (mod (incf times) 50)))
+		    (funcall screensaver--action (- (float-time) start))))))
+	  (xcb:disconnect x)))
       ;; Restore the old setup.
       (delete-frame frame)
       (kill-buffer buffer)
@@ -248,15 +277,59 @@ and the function is free to do whatever it wants in that buffer."
 (defun screensaver--get-events (x)
   (xcb:+event x 'xcb:ButtonPress
 	      (lambda (a b)
-		(message "%s %s" a b)))
+		(message "Button: %s %s" a b)))
   (xcb:+event x 'xcb:MotionNotify
 	      (lambda (a b)
-		(message "%s %s" a b)))
+		(message "Notify: %s %s" a b)))
   (xcb:+event x 'xcb:KeyPress
 	      (lambda (a b)
-		(message "%s %s" a b))))
+		(message "Key: %s %s" a b))))
 
-(defun screensaver--make-window ()
+(defun screensaver--get-color (name)
+  "Return the value of the color specified by NAME."
+  (let* ((color (mapcar #'float (color-values name)))
+	 (white (mapcar #'float (color-values "white")))
+	 (hex (color-rgb-to-hex
+	       (/ (nth 0 color) (nth 0 white))
+	       (/ (nth 1 color) (nth 1 white))
+	       (/ (nth 2 color) (nth 2 white)))))
+    (string-to-number (substring hex 1) 16)))
+
+(defun screensaver--setup-expose (x id)
+  (xcb:+event x 'xcb:Expose (lambda (&rest _)
+			      (screensaver--draw x id))))
+
+(defun screensaver--draw (x window)
+  (message "%s Got exposed" id)
+  (let ((gid (xcb:generate-id x)))
+    (xcb:-+request
+     x
+     (make-instance 'xcb:CreateGC
+		    :cid gid
+		    :drawable window
+		    :value-mask (logior xcb:GC:Foreground
+					xcb:GC:Background
+					xcb:GC:GraphicsExposures
+					xcb:GC:LineWidth)
+		    :foreground 0
+		    :background 0
+		    :line-width 10
+		    :graphics-exposures xcb:GX:clear))
+    (xcb:-+request
+     x
+     (make-instance 'xcb:PolyFillRectangle
+		    :drawable window
+		    :gc gid
+		    :rectangles (list
+				 (make-instance
+				  'xcb:RECTANGLE
+				  :x 50 
+				  :y 50 
+				  :width 100
+				  :height 100))))
+    (xcb:flush x)))
+
+(defun screensaver--make-window (x)
   (let ((root (slot-value (car (slot-value (xcb:get-setup x) 'roots))
                           'root))
 	(id (xcb:generate-id x))
@@ -267,14 +340,16 @@ and the function is free to do whatever it wants in that buffer."
 		    :depth xcb:WindowClass:CopyFromParent
 		    :wid id
 		    :parent root
-		    :x 100
-		    :y 100
-		    :width 500
-		    :height 500
+		    :x 0
+		    :y 0
+		    :width 100
+		    :height 100
 		    :border-width 1
 		    :class xcb:WindowClass:InputOutput
 		    :visual 0
-		    :value-mask (logior xcb:CW:EventMask)
+		    :value-mask (logior xcb:CW:EventMask
+					;;xcb:CW:BackPixel
+					)
 		    :event-mask (logior xcb:EventMask:Exposure
 					xcb:EventMask:ButtonPress
 					xcb:EventMask:ButtonRelease
@@ -282,6 +357,7 @@ and the function is free to do whatever it wants in that buffer."
 					xcb:EventMask:PointerMotion
 					xcb:EventMask:KeyPress
 					xcb:EventMask:KeyRelease)
+		    :background-pixel (screensaver--get-color "blue")
 		    :override-redirect 0))
     (xcb:-+request
      x
@@ -293,12 +369,21 @@ and the function is free to do whatever it wants in that buffer."
 		    :format 8
 		    :data-len (length n)
 		    :data n))
-    (xcb:+request x
+    (xcb:-+request x
         (make-instance 'xcb:MapWindow :window id))
+    (xcb:-+request
+     x
+     (make-instance 'xcb:ConfigureWindow
+                    :window id
+                    :value-mask (logior xcb:ConfigWindow:X
+					xcb:ConfigWindow:Y)
+		    :x -100
+		    :y -100))
     (xcb:flush x)
     id))
 
-;; (progn (setq x (xcb:connect ":0")) (xcb:ewmh:init x t) (setq id (wmsn-acquire)) (screensaver--get-event))
+;; (progn (setq x (xcb:connect ":0")) (xcb:ewmh:init x t) (setq id (screensaver--make-window x)) (screensaver--get-events x) (screensaver--setup-expose x id) nil)
+;; (screensaver--setup-expose x id)
 ;; (progn (sleep-for 5) (foo id) (sleep-for 10) (unlock))
 ;; (xcb:disconnect x)
 
