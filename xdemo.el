@@ -83,7 +83,8 @@
 					  ;; Without the following mask,
 					  ;;the background of the window
 					  ;;will be blank (transparent).
-					  xcb:CW:BackPixel)
+					  xcb:CW:BackPixel
+					  xcb:CW:OverrideRedirect)
 		      :event-mask (logior xcb:EventMask:Exposure
 					  xcb:EventMask:ButtonPress
 					  xcb:EventMask:ButtonRelease
@@ -92,7 +93,7 @@
 					  xcb:EventMask:KeyPress
 					  xcb:EventMask:KeyRelease)
 		      :background-pixel (xdemo--get-color "blue")
-		      :override-redirect 0))
+		      :override-redirect 1))
     ;; Give the window a name (not really necessary).
     (xcb:-+request x (make-instance 'xcb:ChangeProperty
 				    :mode xcb:PropMode:Replace
@@ -104,19 +105,19 @@
 				    :data name))
     ;; Display the window on the screen.
     (xcb:-+request x (make-instance 'xcb:MapWindow :window id))
-    ;; My window manager overrides the x/y hints when creating the
-    ;; window, so just move it.
-    (xcb:-+request x (make-instance 'xcb:ConfigureWindow
-				    :window id
-				    :value-mask (logior xcb:ConfigWindow:X
-							xcb:ConfigWindow:Y)
-				    :x 0
-				    :y 0))
     ;; Flush all the commands, which will make X actually do the
     ;; preceding actions.
     (xcb:flush x)
     ;; Return the window id.
     id))
+
+(defun xdemo--move-window (x id)
+  (xcb:-+request x (make-instance 'xcb:ConfigureWindow
+				  :window id
+				  :value-mask (logior xcb:ConfigWindow:X
+						      xcb:ConfigWindow:Y)
+				  :x 100
+				  :y 100)))
 
 (defun xdemo--get-events (x)
   (xcb:+event x 'xcb:ButtonPress
