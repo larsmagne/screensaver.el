@@ -188,10 +188,11 @@ The function should return non-nil if it changed anything."
       (erase-buffer)
       (setq mode-line-format nil)
       (when screensaver--action
-	(funcall screensaver--action nil))
+	(funcall screensaver--action nil)
+	(redisplay t))
       (let ((start (float-time))
 	    (times 0)
-	    x resized)
+	    x)
 	(unwind-protect
 	    (progn
 	      (setq x (xcb:connect ":0"))
@@ -199,13 +200,6 @@ The function should return non-nil if it changed anything."
 	      ;; window manager hints, but be future-proof.  Ish.
 	      (xcb:ewmh:init x t)
 	      ;; Put a transparent window on top of the Emacs frame.
-	      ;; The reason for the resizing stuff further down is
-	      ;; that Emacs believes that it's totally hidden behind
-	      ;; this window (which it is), but it's transparent, so
-	      ;; you can see the Emacs frame.  By resizing the
-	      ;; transparent window, we force Emacs do to a redisplay.
-	      ;; All the Emacs-native "refresh" functions I tried did
-	      ;; nothing.
 	      (let ((id (screensaver--make-window x))
 		    (event-triggered nil))
 		(screensaver--set-active-window id)
@@ -219,19 +213,16 @@ The function should return non-nil if it changed anything."
 			      (lambda (&rest _)
 				(setq event-triggered t))))
 		(while (not event-triggered)
-		  ;; First time through, resize the overlay to occupy
-		  ;; the entire screen.
-		  (when (and (> (- (float-time) start) 1)
-			     (not resized))
-		    (setq resized t)
-		    (screensaver--resize x id))
 		  (sleep-for 0.1)
 		  ;; Allow updating every fifth second.
 		  (when (and (> (- (float-time) start) 1)
-			     (zerop (mod (incf times) 50)))
-		    (when (funcall screensaver--action (- (float-time) start))
-		      (screensaver--resize x id 100 100)
-		      (screensaver--resize x id))))))
+			     (zerop (mod (incf times) 50))
+			     (funcall screensaver--action
+				      (- (float-time) start)))
+		    ;; We need to call redisplay explicitly because
+		    ;; Emacs thinks there's a non-transparent window
+		    ;; in front of it.
+		    (redisplay t)))))
 	  (xcb:disconnect x)))
       ;; Restore the old setup.
       (delete-frame frame)
@@ -372,8 +363,8 @@ The function should return non-nil if it changed anything."
 		      :parent root
 		      :x 0
 		      :y 0
-		      :width 100
-		      :height 100
+		      :width (+ (x-display-pixel-width) 100)
+		      :height (+ (x-display-pixel-height) 100)
 		      :border-width 1
 		      :class xcb:WindowClass:InputOutput
 		      :visual 0
@@ -382,6 +373,7 @@ The function should return non-nil if it changed anything."
 					  ;;the background of the window
 					  ;;will be blank (transparent).
 					  ;;xcb:CW:BackPixel
+					  xcb:CW:OverrideRedirect
 					  )
 		      :event-mask (logior xcb:EventMask:Exposure
 					  xcb:EventMask:ButtonPress
@@ -391,7 +383,7 @@ The function should return non-nil if it changed anything."
 					  xcb:EventMask:KeyPress
 					  xcb:EventMask:KeyRelease)
 		      :background-pixel (screensaver--get-color "blue")
-		      :override-redirect 0))
+		      :override-redirect 1))
     ;; Give the window a name (not really necessary).
     (xcb:-+request x (make-instance 'xcb:ChangeProperty
 				    :mode xcb:PropMode:Replace
@@ -403,14 +395,6 @@ The function should return non-nil if it changed anything."
 				    :data name))
     ;; Display the window on the screen.
     (xcb:-+request x (make-instance 'xcb:MapWindow :window id))
-    ;; My window manager overrides the x/y hints when creating the
-    ;; window, so just move it.
-    (xcb:-+request x (make-instance 'xcb:ConfigureWindow
-				    :window id
-				    :value-mask (logior xcb:ConfigWindow:X
-							xcb:ConfigWindow:Y)
-				    :x -100
-				    :y -100))
     ;; Flush all the commands, which will make X actually do the
     ;; preceding actions.
     (xcb:flush x)
