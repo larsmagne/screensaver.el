@@ -292,17 +292,6 @@ The function should return non-nil if it changed anything."
   (loop for slot in (object-slots error)
 	collect (cons slot (slot-value error slot))))
 
-(defun screensaver--get-events (x)
-  (xcb:+event x 'xcb:ButtonPress
-	      (lambda (a b)
-		(message "Button: %s %s" a b)))
-  (xcb:+event x 'xcb:MotionNotify
-	      (lambda (a b)
-		(message "Notify: %s %s" a b)))
-  (xcb:+event x 'xcb:KeyPress
-	      (lambda (a b)
-		(message "Key: %s %s" a b))))
-
 (defun screensaver--get-color (name)
   "Return the value of the color specified by NAME."
   (let* ((color (mapcar #'float (color-values name)))
@@ -312,43 +301,6 @@ The function should return non-nil if it changed anything."
 	       (/ (nth 1 color) (nth 1 white))
 	       (/ (nth 2 color) (nth 2 white)))))
     (string-to-number (substring hex 1) 16)))
-
-;; If we want the xcd window to be visible, we do the drawing of the
-;; data from this event.
-(defun screensaver--setup-expose (x id)
-  (xcb:+event x 'xcb:Expose (lambda (&rest _)
-			      (screensaver--draw x id))))
-
-(defun screensaver--draw (x window)
-  (let ((gid (xcb:generate-id x)))
-    (xcb:-+request
-     x
-     (make-instance 'xcb:CreateGC
-		    :cid gid
-		    :drawable window
-		    :value-mask (logior xcb:GC:Foreground
-					xcb:GC:Background
-					xcb:GC:GraphicsExposures
-					xcb:GC:LineWidth)
-		    :foreground 0
-		    :background 0
-		    :line-width 10
-		    :graphics-exposures xcb:GX:clear))
-    ;; Example drawing we could be doing, but we'd probably do
-    ;; something else here...
-    (xcb:-+request
-     x
-     (make-instance 'xcb:PolyFillRectangle
-		    :drawable window
-		    :gc gid
-		    :rectangles (list
-				 (make-instance
-				  'xcb:RECTANGLE
-				  :x 50 
-				  :y 50 
-				  :width 100
-				  :height 100))))
-    (xcb:flush x)))
 
 (defun screensaver--make-window (x)
   "Create the window that'll get the events from X."
