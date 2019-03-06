@@ -93,6 +93,8 @@
 					  xcb:EventMask:KeyPress
 					  xcb:EventMask:KeyRelease)
 		      :background-pixel (xdemo--get-color "blue")
+		      ;; If this is 0, the window manager will
+		      ;; position the window.
 		      :override-redirect 1))
     ;; Give the window a name (not really necessary).
     (xcb:-+request x (make-instance 'xcb:ChangeProperty
