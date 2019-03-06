@@ -22,23 +22,25 @@
 ;;; Commentary:
 
 ;; This file is a "simple" demonstration of how you open an xcb window
-;; from Emacs and display a rectangle in it.  This is really useful
-;; documentation, and the concepts there map 1:1 to the xelb/xcb library:
+;; from Emacs and display a rectangle in it.
+
+;; There xcb interface is documented well here, and the concepts map
+;; 1:1 to the xelb/xcb library:
 
 ;; https://www.x.org/releases/X11R7.5/doc/libxcb/tutorial/#notions
 
 ;; This file isn't meant to be used for anything other than a
 ;; demonstration of how to get started working with xcb concepts in
-;; Emacs, which I couldn't really find anywhere else.  The xelb/xcb
-;; library is really nice, but it doesn't have much in the way of
-;; examples or documentation.
+;; Emacs, which I couldn't find anywhere else.  The xelb/xcb library
+;; is really nice, but it doesn't have much in the way of examples or
+;; documentation.
 
 ;; To use:
 
 ;; M-: (make-xcb-window)
 
 ;; This should display a 500x500 teal window on your screen.  It
-;; should draw a black rectangle.
+;; should draw a black rectangle in the window.
 
 ;; (xcb:disconnect x)
 
@@ -149,6 +151,8 @@
 
 (defun xdemo--draw (x window)
   (let ((gid (xcb:generate-id x)))
+    ;; Set up a "graphics context", which is just a bag of
+    ;; colour/line/etc settings used when drawing.
     (xcb:-+request
      x
      (make-instance 'xcb:CreateGC
