@@ -325,8 +325,7 @@ The function should return non-nil if it changed anything."
 					  ;;the background of the window
 					  ;;will be blank (transparent).
 					  ;;xcb:CW:BackPixel
-					  xcb:CW:OverrideRedirect
-					  )
+					  xcb:CW:OverrideRedirect)
 		      :event-mask (logior xcb:EventMask:Exposure
 					  xcb:EventMask:ButtonPress
 					  xcb:EventMask:ButtonRelease
