@@ -261,13 +261,12 @@ The function should return non-nil if it changed anything."
 		       append (cl-loop for y-offset from 0
 				       upto height by chunk-size
 				       collect (cons x-offset y-offset)))))
-	(when t
-	  ;; ... so that we can randomise them.
-	  (let ((rchunks nil))
-	    (while chunks
-	      (push (elt chunks (random (length chunks))) rchunks)
-	      (setq chunks (delq (car rchunks) chunks)))
-	    (setq chunks rchunks)))
+	;; ... so that we can randomise them.
+	(let ((rchunks nil))
+	  (while chunks
+	    (push (elt chunks (random (length chunks))) rchunks)
+	    (setq chunks (delq (car rchunks) chunks)))
+	  (setq chunks rchunks))
 	(cl-loop for (x-offset . y-offset) in chunks
 		 for chunk-width = (min chunk-size (- width x-offset))
 		 for chunk-height = (min chunk-size (- height y-offset))
