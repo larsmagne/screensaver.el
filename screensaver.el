@@ -182,8 +182,8 @@ The function should return non-nil if it changed anything."
 	  ;; window manager hints, but be future-proof.  Ish.
 	  (xcb:ewmh:init x t)
 	  ;; Put a transparent window on the screen.
-	  (let* ((width (+ (x-display-pixel-width) 100))
-		 (height (+ (x-display-pixel-height) 100))
+	  (let* ((width (or nil (+ (x-display-pixel-width) 100)))
+		 (height (or nil (+ (x-display-pixel-height) 100)))
 		 (id (screensaver--make-window x width height))
 		 (event-triggered nil))
 	    (screensaver--set-active-window x id)
@@ -259,7 +259,8 @@ The function should return non-nil if it changed anything."
 	       while (not (funcall stop-callback))
 	       do (sit-for 0.1)
 	       do (cl-loop for y-offset from 0 upto height by chunk-size
-			   for chunk-width = (min chunk-size (- width x-offset))
+			   for chunk-width = (min chunk-size
+						  (- width x-offset))
 			   for chunk-height = (min chunk-size
 						   (- height y-offset))
 			   while (not (funcall stop-callback))
@@ -285,7 +286,14 @@ The function should return non-nil if it changed anything."
       (xcb:flush x))))
 
 (defun screensaver--to-string (chars)
-  (coerce chars 'string))
+  (cl-coerce chars 'string))
+
+(defsubst screensaver--image-position (width height x y)
+  (if (and (<= 0 x width)
+	   (<= 0 y height))
+      (+ (* x 3)
+	 (* y width 3))
+    0))
 
 (defun screensaver--image-chunk (width height chunk-width chunk-height
 				       x-offset y-offset)
@@ -298,13 +306,6 @@ The function should return non-nil if it changed anything."
 					(char-after (+ pos 2))
 					(char-after (+ pos 1))
 					0))))
-
-(defsubst screensaver--image-position (width height x y)
-  (if (and (<= 0 x width)
-	   (<= 0 y height))
-      (+ (* x 3)
-	 (* y width 3))
-    0))
 
 (defun screensaver--content-type (image)
   ;; Get the MIME type by running "file" over it.
