@@ -62,7 +62,6 @@ since the previous time the function was called.")
 
 (defvar screensaver--timer nil)
 (defvar screensaver--timeout (* 5 60))
-(defvar screensaver--action nil)
 (defvar screensaver--hidden nil)
 
 (defun screensaver-hide-and-start (&optional timeout action)
@@ -92,7 +91,6 @@ The function should return non-nil if it changed anything."
   (screensaver-stop)
   (when timeout
     (setq screensaver--timeout timeout))
-  (setq screensaver--action action)
   (setq screensaver--timer (screensaver--schedule)))
 
 (defun screensaver-stop ()
@@ -208,11 +206,12 @@ The function should return non-nil if it changed anything."
 	      ;; Allow updating every fifth second.
 	      (when (and (> (- (float-time) start) 1)
 			 (zerop (mod (incf times) 50)))
-		(screensaver--display-image
-		 (funcall screensaver-image (- (float-time) start))
-		 x id width height
-		 (lambda ()
-		   event-triggered))))))
+		(when-let ((file (funcall screensaver-image
+					  (- (float-time) start))))
+		  (screensaver--display-image
+		   file x id width height
+		   (lambda ()
+		     event-triggered)))))))
       (xcb:disconnect x)))
   (screensaver-stop)
   (screensaver--schedule))
