@@ -110,7 +110,7 @@ The function should return non-nil if it changed anything."
 			 'screensaver--schedule)))))
 
 (defmacro screensaver--with-x (&rest body)
-  `(let* ((x (xcb:connect ":0"))
+  `(let* ((x (xcb:connect ":1"))
 	  (root (slot-value (car (slot-value (xcb:get-setup x) 'roots))
                             'root)))
      (unwind-protect
@@ -166,75 +166,147 @@ The function should return non-nil if it changed anything."
 		      :time xcb:Time:CurrentTime))))
 
 (defun screensaver--activate ()
-  (let ((active-window (screensaver--get-active-window))
-	(selected (selected-frame))
-	(frame
-	 (make-frame
-	  `((title . "Screensaver")
-	    (left . 0)
-	    (top . 0)
-	    (width . 400)
-	    (height . 200)
-	    (user-position . t)
-	    (background-color . "black")
-	    (vertical-scroll-bars . nil)
-	    (minibuffer . nil)
-	    (horizontal-scroll-bars . nil)))))
-    (set-frame-width frame (x-display-pixel-width) nil t)
-    (set-frame-height frame (x-display-pixel-height) nil t)
-    (select-frame-set-input-focus frame)
-    (let ((buffer (switch-to-buffer "*screensaver*")))
-      (setq truncate-lines t)
-      (erase-buffer)
-      (setq mode-line-format nil)
-      (when screensaver--action
-	(funcall screensaver--action nil)
-	(redisplay t))
-      (let ((start (float-time))
-	    (times 0)
-	    x)
-	(unwind-protect
-	    (progn
-	      (setq x (xcb:connect ":0"))
-	      ;; Probably not necessary to initialise the extended
-	      ;; window manager hints, but be future-proof.  Ish.
-	      (xcb:ewmh:init x t)
-	      ;; Put a transparent window on top of the Emacs frame.
-	      (let ((id (screensaver--make-window x))
-		    (event-triggered nil))
-		(screensaver--set-active-window id)
-		(dolist (event '(xcb:ButtonPress
-				 xcb:MotionNotify
-				 xcb:KeyPress))
-		  ;; Register event handling on this window to stop
-		  ;; saving the screen when something happens (button
-		  ;; presses, mouse moves and key presses).
-		  (xcb:+event x event
-			      (lambda (&rest _)
-				(setq event-triggered t))))
-		(while (not event-triggered)
-		  (sleep-for 0.1)
-		  ;; Allow updating every fifth second.
-		  (when (and (> (- (float-time) start) 1)
-			     (zerop (mod (incf times) 50))
-			     (funcall screensaver--action
-				      (- (float-time) start)))
-		    ;; We need to call redisplay explicitly because
-		    ;; Emacs thinks there's a non-transparent window
-		    ;; in front of it.
-		    (redisplay t)))))
-	  (xcb:disconnect x)))
-      ;; Restore the old setup.
-      (delete-frame frame)
-      (kill-buffer buffer)
-      (screensaver-stop)
-      (screensaver--schedule)
-      (if screensaver--hidden
-	  (progn
-	    (make-frame-invisible (selected-frame) t)
-	    (screensaver--set-active-window active-window))
-	(when selected
-	  (select-frame-set-input-focus selected))))))
+  (let ((start (float-time))
+	(times 0)
+	x)
+    (unwind-protect
+	(progn
+	  (setq x (xcb:connect ":1"))
+	  ;; Probably not necessary to initialise the extended
+	  ;; window manager hints, but be future-proof.  Ish.
+	  (xcb:ewmh:init x t)
+	  ;; Put a transparent window on top of the Emacs frame.
+	  (let* ((width (+ (x-display-pixel-width) 100))
+		 (height (+ (x-display-pixel-height) 100))
+		 (id (screensaver--make-window x width height))
+		 (event-triggered nil))
+	    (screensaver--set-active-window id)
+	    (when screensaver--image
+	      (screensaver--display-image (funcall screensaver--image nil)
+					  x window width height))
+	    (dolist (event '(xcb:ButtonPress
+			     xcb:MotionNotify
+			     xcb:KeyPress))
+	      ;; Register event handling on this window to stop
+	      ;; saving the screen when something happens (button
+	      ;; presses, mouse moves and key presses).
+	      (xcb:+event x event
+			  (lambda (&rest _)
+			    (setq event-triggered t))))
+	    (while (not event-triggered)
+	      (sleep-for 0.1)
+	      ;; Allow updating every fifth second.
+	      (when (and (> (- (float-time) start) 1)
+			 (zerop (mod (incf times) 50)))
+		(screensaver--display-image
+		 (funcall screensaver--image (- (float-time) start))
+		 x window width height)))))
+      (xcb:disconnect x)))
+  (screensaver-stop)
+  (screensaver--schedule))
+
+(defvar screensaver--image (lambda (arg)
+			     "~/films/6 Underground/IMG_3849.JPG"))
+
+(defun screensaver--display-image (file x window width height)
+  (let ((gid (xcb:generate-id x)))
+    ;; Set up a "graphics context", which is just a bag of
+    ;; colour/line/etc settings used when drawing.
+    (xcb:-+request
+     x
+     (make-instance 'xcb:CreateGC
+		    :cid gid
+		    :drawable window
+		    :value-mask (logior xcb:GC:Foreground
+					xcb:GC:Background
+					xcb:GC:GraphicsExposures
+					xcb:GC:LineWidth)
+		    :foreground (xdemo--get-color "green")
+		    :background (xdemo--get-color "red")
+		    :line-width 10
+		    :graphics-exposures xcb:GX:clear))
+    (with-temp-buffer
+      (set-buffer-multibyte nil)
+      (insert-file-contents-literally file)
+      (call-process-region
+       (point-min) (point-max) "convert" t (current-buffer) t
+       (format "%s:-" (cadr (split-string
+			     (screensaver--content-type (buffer-string))
+			     "/")))
+       "-resize" (format "%dx%d" width height)
+       "-background" "black" "-gravity" "center"
+       "-extent" (format "%dx%d" width height) "ppm:-")
+      (goto-char (point-min))
+      ;; Delete the first three lines, as well as any comments.
+      (dotimes (_ 3)
+	(cl-loop do (delete-region (point) (1+ (line-end-position)))
+		 while (looking-at "#")))
+      ;; Now we have the RGB data in the buffer, and the image is the
+      ;; same dimensions as the window (see the "convert" invocation).
+      ;; Transfer the data to the X server in chunks, since we can't do
+      ;; it in one go.
+      (cl-loop with chunk-size = 255
+	       for x-offset from 0 upto width by chunk-size
+	       do (cl-loop for y-offset from 0 upto height by chunk-size
+			   for chunk-width = (min chunk-size (- width x-offset))
+			   for chunk-height = (min chunk-size
+						   (- height y-offset))
+			   do
+			   (xcb:-+request
+			    x
+			    (make-instance
+			     'xcb:PutImage
+			     :format xcb:ImageFormat:ZPixmap
+			     :drawable window
+			     :gc gid
+			     :width chunk-width
+			     :height chunk-height
+			     :dst-x x-offset
+			     :dst-y y-offset
+			     :left-pad 0
+			     :depth 24
+			     :data (screensaver--to-string
+				    (screensaver--image-chunk
+				     width height
+				     chunk-width chunk-height
+				     x-offset y-offset))))))
+      (xcb:flush x))))
+
+(defun screensaver--to-string (chars)
+  (with-temp-buffer
+    (set-buffer-multibyte nil)
+    (dolist (char chars)
+      (insert char))
+    (buffer-string)))
+
+(defun screensaver--image-chunk (width height chunk-width chunk-height
+				       x-offset y-offset)
+  (cl-loop for y from 0 upto (1- chunk-height)
+	   append (cl-loop for x from 0 upto (1- chunk-width)
+			   for pos = (screensaver--image-position
+				      width height
+				      (+ x-offset x) (+ y-offset y))
+			   append (list (char-after (+ pos 3))
+					(char-after (+ pos 2))
+					(char-after (+ pos 1))
+					0))))
+
+(defsubst screensaver--image-position (width height x y)
+  (if (and (<= 0 x width)
+	   (<= 0 y height))
+      (+ (* x 3)
+	 (* y width 3))
+    0))
+
+(defun screensaver--content-type (image)
+  ;; Get the MIME type by running "file" over it.
+  (with-temp-buffer
+    (set-buffer-multibyte nil)
+    (insert image)
+    (call-process-region (point-min) (point-max)
+			 "file" t (current-buffer) nil
+			 "--mime-type" "-")
+    (cadr (split-string (buffer-string)))))
 
 (defun screensaver--resize (x id &optional width height)
   (unless (numberp width)
@@ -302,7 +374,7 @@ The function should return non-nil if it changed anything."
 	       (/ (nth 2 color) (nth 2 white)))))
     (string-to-number (substring hex 1) 16)))
 
-(defun screensaver--make-window (x)
+(defun screensaver--make-window (x width height)
   "Create the window that'll get the events from X."
   (let ((root (slot-value (car (slot-value (xcb:get-setup x) 'roots))
                           'root))
@@ -315,8 +387,8 @@ The function should return non-nil if it changed anything."
 		      :parent root
 		      :x 0
 		      :y 0
-		      :width (+ (x-display-pixel-width) 100)
-		      :height (+ (x-display-pixel-height) 100)
+		      :width width
+		      :height height
 		      :border-width 1
 		      :class xcb:WindowClass:InputOutput
 		      :visual 0
