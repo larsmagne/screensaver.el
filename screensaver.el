@@ -49,6 +49,7 @@
 (require 'xcb)
 (require 'xcb-screensaver)
 (require 'xcb-ewmh)
+(require 'xcb-bigreq)
 (require 'color)
 
 (defvar screensaver--timer nil)
@@ -175,7 +176,7 @@ The function should return non-nil if it changed anything."
 	  ;; Probably not necessary to initialise the extended
 	  ;; window manager hints, but be future-proof.  Ish.
 	  (xcb:ewmh:init x t)
-	  ;; Put a transparent window on top of the Emacs frame.
+	  ;; Put a transparent window on the screen.
 	  (let* ((width (+ (x-display-pixel-width) 100))
 		 (height (+ (x-display-pixel-height) 100))
 		 (id (screensaver--make-window x width height))
@@ -245,6 +246,7 @@ The function should return non-nil if it changed anything."
       ;; same dimensions as the window (see the "convert" invocation).
       ;; Transfer the data to the X server in chunks, since we can't do
       ;; it in one go.
+      (xcb:+request+reply x (make-instance 'xcb:bigreq:Enable))
       (cl-loop with chunk-size = 255
 	       for x-offset from 0 upto width by chunk-size
 	       do (cl-loop for y-offset from 0 upto height by chunk-size
