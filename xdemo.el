@@ -54,9 +54,9 @@
 (require 'color)
 
 (defun make-xcb-window ()
-  (setq x (xcb:connect ":0"))
+  (setq x (xcb:connect ":1"))
   (xcb:ewmh:init x t)
-  (xdemo--make-window x)
+  (setq window (xdemo--make-window x))
   (xdemo--get-events x)
   (xdemo--setup-expose x)
   nil)
@@ -74,7 +74,7 @@
 		      :parent root
 		      :x 0
 		      :y 0
-		      :width 500
+		      :width 600
 		      :height 500
 		      :border-width 1
 		      :class xcb:WindowClass:InputOutput
@@ -92,7 +92,7 @@
 					  xcb:EventMask:PointerMotion
 					  xcb:EventMask:KeyPress
 					  xcb:EventMask:KeyRelease)
-		      :background-pixel (xdemo--get-color "blue")
+		      :background-pixel (xdemo--get-color "red")
 		      ;; If this is 0, the window manager will
 		      ;; position the window.
 		      :override-redirect 1))
@@ -110,7 +110,7 @@
     ;; Flush all the commands, which will make X actually do the
     ;; preceding actions.
     (xcb:flush x)
-    ;; Return the window id.
+    ;; return the window id.
     id))
 
 (defun xdemo--move-window (x id)
@@ -139,7 +139,8 @@
 	 (hex (color-rgb-to-hex
 	       (/ (nth 0 color) (nth 0 white))
 	       (/ (nth 1 color) (nth 1 white))
-	       (/ (nth 2 color) (nth 2 white)))))
+	       (/ (nth 2 color) (nth 2 white))
+	       2)))
     (string-to-number (substring hex 1) 16)))
 
 ;; If we want the xcd window to be visible, we do the drawing of the
@@ -165,10 +166,11 @@
 					xcb:GC:Background
 					xcb:GC:GraphicsExposures
 					xcb:GC:LineWidth)
-		    :foreground 0
-		    :background 0
+		    :foreground (xdemo--get-color "green")
+		    :background (xdemo--get-color "red")
 		    :line-width 10
 		    :graphics-exposures xcb:GX:clear))
+    (xcb:+request+reply x (make-instance 'xcb:bigreq:Enable))
     ;; Example drawing we could be doing, but we'd probably do
     ;; something else here...
     (xcb:-+request
@@ -179,7 +181,7 @@
 		    :rectangles (list
 				 (make-instance
 				  'xcb:RECTANGLE
-				  :x 50 
+				  :x 80 
 				  :y 50 
 				  :width 100
 				  :height 100))))
