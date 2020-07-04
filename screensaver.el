@@ -182,8 +182,8 @@ The function should return non-nil if it changed anything."
 	  ;; window manager hints, but be future-proof.  Ish.
 	  (xcb:ewmh:init x t)
 	  ;; Put a transparent window on the screen.
-	  (let* ((width (or nil (+ (x-display-pixel-width) 100)))
-		 (height (or nil (+ (x-display-pixel-height) 100)))
+	  (let* ((width (or nil (x-display-pixel-width)))
+		 (height (or nil (x-display-pixel-height)))
 		 (id (screensaver--make-window x width height))
 		 (event-triggered nil))
 	    (screensaver--set-active-window x id)
@@ -254,36 +254,45 @@ The function should return non-nil if it changed anything."
       ;; Transfer the data to the X server in chunks, since we can't do
       ;; it in one go.
       (xcb:+request+reply x (make-instance 'xcb:bigreq:Enable))
-      (cl-loop with chunk-size = 255
-	       for x-offset from 0 upto width by chunk-size
-	       while (not (funcall stop-callback))
-	       do (sit-for 0.1)
-	       do (cl-loop for y-offset from 0 upto height by chunk-size
-			   for chunk-width = (min chunk-size
-						  (- width x-offset))
-			   for chunk-height = (min chunk-size
-						   (- height y-offset))
-			   while (not (funcall stop-callback))
-			   do
-			   (xcb:-+request
-			    x
-			    (make-instance
-			     'xcb:PutImage
-			     :format xcb:ImageFormat:ZPixmap
-			     :drawable window
-			     :gc gid
-			     :width chunk-width
-			     :height chunk-height
-			     :dst-x x-offset
-			     :dst-y y-offset
-			     :left-pad 0
-			     :depth 24
-			     :data (screensaver--to-string
-				    (screensaver--image-chunk
-				     width height
-				     chunk-width chunk-height
-				     x-offset y-offset))))))
-      (xcb:flush x))))
+      (let* ((chunk-size 255)
+	     (chunks
+	      ;; First collect all the chunk positions...
+	      (cl-loop for x-offset from 0 upto width by chunk-size
+		       append (cl-loop for y-offset from 0
+				       upto height by chunk-size
+				       collect (cons x-offset y-offset)))))
+	(when t
+	  ;; ... so that we can randomise them.
+	  (let ((rchunks nil))
+	    (while chunks
+	      (push (elt chunks (random (length chunks))) rchunks)
+	      (setq chunks (delq (car rchunks) chunks)))
+	    (setq chunks rchunks)))
+	(cl-loop for (x-offset . y-offset) in chunks
+		 for chunk-width = (min chunk-size (- width x-offset))
+		 for chunk-height = (min chunk-size (- height y-offset))
+		 while (not (funcall stop-callback))
+		 do
+		 (sit-for 0.01)
+		 (xcb:-+request
+		  x
+		  (make-instance
+		   'xcb:PutImage
+		   :format xcb:ImageFormat:ZPixmap
+		   :drawable window
+		   :gc gid
+		   :width chunk-width
+		   :height chunk-height
+		   :dst-x x-offset
+		   :dst-y y-offset
+		   :left-pad 0
+		   :depth 24
+		   :data (screensaver--to-string
+			  (screensaver--image-chunk
+			   width height
+			   chunk-width chunk-height
+			   x-offset y-offset)))))
+	(xcb:flush x)))))
 
 (defun screensaver--to-string (chars)
   (cl-coerce chars 'string))
