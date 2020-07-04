@@ -183,7 +183,7 @@ The function should return non-nil if it changed anything."
 	    (screensaver--set-active-window id)
 	    (when screensaver--image
 	      (screensaver--display-image (funcall screensaver--image nil)
-					  x window width height))
+					  x id width height))
 	    (dolist (event '(xcb:ButtonPress
 			     xcb:MotionNotify
 			     xcb:KeyPress))
@@ -200,7 +200,7 @@ The function should return non-nil if it changed anything."
 			 (zerop (mod (incf times) 50)))
 		(screensaver--display-image
 		 (funcall screensaver--image (- (float-time) start))
-		 x window width height)))))
+		 x id width height)))))
       (xcb:disconnect x)))
   (screensaver-stop)
   (screensaver--schedule))
@@ -221,8 +221,8 @@ The function should return non-nil if it changed anything."
 					xcb:GC:Background
 					xcb:GC:GraphicsExposures
 					xcb:GC:LineWidth)
-		    :foreground (xdemo--get-color "green")
-		    :background (xdemo--get-color "red")
+		    :foreground (screensaver--get-color "green")
+		    :background (screensaver--get-color "red")
 		    :line-width 10
 		    :graphics-exposures xcb:GX:clear))
     (with-temp-buffer
@@ -273,11 +273,7 @@ The function should return non-nil if it changed anything."
       (xcb:flush x))))
 
 (defun screensaver--to-string (chars)
-  (with-temp-buffer
-    (set-buffer-multibyte nil)
-    (dolist (char chars)
-      (insert char))
-    (buffer-string)))
+  (coerce chars 'string))
 
 (defun screensaver--image-chunk (width height chunk-width chunk-height
 				       x-offset y-offset)
