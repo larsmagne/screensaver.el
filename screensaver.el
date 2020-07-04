@@ -52,6 +52,14 @@
 (require 'xcb-bigreq)
 (require 'color)
 
+(defvar screensaver-display ":0"
+  "The display we're running on.")
+
+(defvar screensaver-image nil
+  "Function to be called to return an image file.
+It takes one parameter, which is either nil, or the time passed
+since the previous time the function was called.")
+
 (defvar screensaver--timer nil)
 (defvar screensaver--timeout (* 5 60))
 (defvar screensaver--action nil)
@@ -111,7 +119,7 @@ The function should return non-nil if it changed anything."
 			 'screensaver--schedule)))))
 
 (defmacro screensaver--with-x (&rest body)
-  `(let* ((x (xcb:connect ":1"))
+  `(let* ((x (xcb:connect screensaver-display))
 	  (root (slot-value (car (slot-value (xcb:get-setup x) 'roots))
                             'root)))
      (unwind-protect
@@ -171,7 +179,7 @@ The function should return non-nil if it changed anything."
 	x)
     (unwind-protect
 	(progn
-	  (setq x (xcb:connect ":1"))
+	  (setq x (xcb:connect screensaver-display))
 	  ;; Probably not necessary to initialise the extended
 	  ;; window manager hints, but be future-proof.  Ish.
 	  (xcb:ewmh:init x t)
@@ -190,8 +198,8 @@ The function should return non-nil if it changed anything."
 	      (xcb:+event x event
 			  (lambda (&rest _)
 			    (setq event-triggered t))))
-	    (when screensaver--image
-	      (screensaver--display-image (funcall screensaver--image nil)
+	    (when screensaver-image
+	      (screensaver--display-image (funcall screensaver-image nil)
 					  x id width height
 					  (lambda ()
 					    event-triggered)))
@@ -201,16 +209,13 @@ The function should return non-nil if it changed anything."
 	      (when (and (> (- (float-time) start) 1)
 			 (zerop (mod (incf times) 50)))
 		(screensaver--display-image
-		 (funcall screensaver--image (- (float-time) start))
+		 (funcall screensaver-image (- (float-time) start))
 		 x id width height
 		 (lambda ()
 		   event-triggered))))))
       (xcb:disconnect x)))
   (screensaver-stop)
   (screensaver--schedule))
-
-(defvar screensaver--image (lambda (arg)
-			     "~/films/6 Underground/IMG_3849.JPG"))
 
 (defun screensaver--display-image (file x window width height stop-callback)
   (let ((gid (xcb:generate-id x)))
