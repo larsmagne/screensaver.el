@@ -158,13 +158,12 @@ The function should return non-nil if it changed anything."
 			:long-offset 0))
      'value))))
 
-(defun screensaver--set-active-window (id)
-  (screensaver--with-x
-   (xcb:+request x
-       (make-instance 'xcb:SetInputFocus
-		      :revert-to xcb:InputFocus:Parent
-		      :focus id
-		      :time xcb:Time:CurrentTime))))
+(defun screensaver--set-active-window (x id)
+  (xcb:+request x
+      (make-instance 'xcb:SetInputFocus
+		     :revert-to xcb:InputFocus:Parent
+		     :focus id
+		     :time xcb:Time:CurrentTime)))
 
 (defun screensaver--activate ()
   (let ((start (float-time))
@@ -181,10 +180,7 @@ The function should return non-nil if it changed anything."
 		 (height (+ (x-display-pixel-height) 100))
 		 (id (screensaver--make-window x width height))
 		 (event-triggered nil))
-	    (screensaver--set-active-window id)
-	    (when screensaver--image
-	      (screensaver--display-image (funcall screensaver--image nil)
-					  x id width height))
+	    (screensaver--set-active-window x id)
 	    (dolist (event '(xcb:ButtonPress
 			     xcb:MotionNotify
 			     xcb:KeyPress))
@@ -194,6 +190,11 @@ The function should return non-nil if it changed anything."
 	      (xcb:+event x event
 			  (lambda (&rest _)
 			    (setq event-triggered t))))
+	    (when screensaver--image
+	      (screensaver--display-image (funcall screensaver--image nil)
+					  x id width height
+					  (lambda ()
+					    event-triggered)))
 	    (while (not event-triggered)
 	      (sleep-for 0.1)
 	      ;; Allow updating every fifth second.
@@ -201,7 +202,9 @@ The function should return non-nil if it changed anything."
 			 (zerop (mod (incf times) 50)))
 		(screensaver--display-image
 		 (funcall screensaver--image (- (float-time) start))
-		 x id width height)))))
+		 x id width height
+		 (lambda ()
+		   event-triggered))))))
       (xcb:disconnect x)))
   (screensaver-stop)
   (screensaver--schedule))
@@ -209,7 +212,7 @@ The function should return non-nil if it changed anything."
 (defvar screensaver--image (lambda (arg)
 			     "~/films/6 Underground/IMG_3849.JPG"))
 
-(defun screensaver--display-image (file x window width height)
+(defun screensaver--display-image (file x window width height stop-callback)
   (let ((gid (xcb:generate-id x)))
     ;; Set up a "graphics context", which is just a bag of
     ;; colour/line/etc settings used when drawing.
@@ -249,10 +252,13 @@ The function should return non-nil if it changed anything."
       (xcb:+request+reply x (make-instance 'xcb:bigreq:Enable))
       (cl-loop with chunk-size = 255
 	       for x-offset from 0 upto width by chunk-size
+	       while (not (funcall stop-callback))
+	       do (sit-for 0.1)
 	       do (cl-loop for y-offset from 0 upto height by chunk-size
 			   for chunk-width = (min chunk-size (- width x-offset))
 			   for chunk-height = (min chunk-size
 						   (- height y-offset))
+			   while (not (funcall stop-callback))
 			   do
 			   (xcb:-+request
 			    x
