@@ -243,12 +243,10 @@ The function should return non-nil if it changed anything."
 			     "/")))
        "-resize" (format "%dx%d" width height)
        "-background" "black" "-gravity" "center"
-       "-extent" (format "%dx%d" width height) "ppm:-")
-      (goto-char (point-min))
-      ;; Delete the first three lines, as well as any comments.
-      (dotimes (_ 3)
-	(cl-loop do (delete-region (point) (1+ (line-end-position)))
-		 while (looking-at "#")))
+       "-extent" (format "%dx%d" width height) "png:-")
+      (call-process-region
+       (point-min) (point-max) "stream" t (current-buffer) t
+       "-map" "bgrp" "-storage-type" "char" "png:-" "-")
       ;; Now we have the RGB data in the buffer, and the image is the
       ;; same dimensions as the window (see the "convert" invocation).
       ;; Transfer the data to the X server in chunks, since we can't do
@@ -293,27 +291,17 @@ The function should return non-nil if it changed anything."
 			   x-offset y-offset)))))
 	(xcb:flush x)))))
 
-(defun screensaver--to-string (chars)
-  (cl-coerce chars 'string))
-
-(defsubst screensaver--image-position (width height x y)
-  (if (and (<= 0 x width)
-	   (<= 0 y height))
-      (+ (* x 3)
-	 (* y width 3))
-    0))
+(defun screensaver--to-string (lines)
+  (with-temp-buffer
+    (set-buffer-multibyte nil)
+    (mapc #'insert lines)
+    (buffer-string)))
 
 (defun screensaver--image-chunk (width height chunk-width chunk-height
 				       x-offset y-offset)
   (cl-loop for y from 0 upto (1- chunk-height)
-	   append (cl-loop for x from 0 upto (1- chunk-width)
-			   for pos = (screensaver--image-position
-				      width height
-				      (+ x-offset x) (+ y-offset y))
-			   append (list (char-after (+ pos 3))
-					(char-after (+ pos 2))
-					(char-after (+ pos 1))
-					0))))
+	   for start = (+ (* (+ y-offset y) width 4) (* x-offset 4) 1)
+	   collect (buffer-substring start (+ start (* chunk-width 4)))))
 
 (defun screensaver--content-type (image)
   ;; Get the MIME type by running "file" over it.
