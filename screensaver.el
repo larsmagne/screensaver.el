@@ -288,8 +288,8 @@ The function should return non-nil if it changed anything."
 			  (screensaver--image-chunk
 			   width height
 			   chunk-width chunk-height
-			   x-offset y-offset)))))
-	(xcb:flush x)))))
+			   x-offset y-offset))))
+		 (xcb:flush x))))))
 
 (defun screensaver--to-string (lines)
   (with-temp-buffer
