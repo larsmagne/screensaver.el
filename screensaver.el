@@ -244,6 +244,8 @@ The function should return non-nil if it changed anything."
        "-resize" (format "%dx%d" width height)
        "-background" "black" "-gravity" "center"
        "-extent" (format "%dx%d" width height) "png:-")
+      ;; Transform the image into RGB (with padding) data (in
+      ;; little-endian 32-bit order).
       (call-process-region
        (point-min) (point-max) "stream" t (current-buffer) t
        "-map" "bgrp" "-storage-type" "char" "png:-" "-")
