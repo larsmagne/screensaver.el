@@ -111,7 +111,7 @@ The function should return non-nil if it changed anything."
     (if (>= (/ idle 1000) screensaver--timeout)
 	;; We've already been activated.
 	(unless (get-buffer "*screensaver*")
-	  (screensaver--activate))
+	  (ignore-errors (screensaver--activate)))
       (setq screensaver--timer
 	    (run-at-time (- screensaver--timeout (/ idle 1000)) nil
 			 'screensaver--schedule)))))
@@ -197,10 +197,12 @@ The function should return non-nil if it changed anything."
 			  (lambda (&rest _)
 			    (setq event-triggered t))))
 	    (when screensaver-image
-	      (screensaver--display-image (funcall screensaver-image nil)
-					  x id width height
-					  (lambda ()
-					    event-triggered)))
+	      (let ((file (funcall screensaver-image nil)))
+		(when (file-exists-p file)
+		  (screensaver--display-image (funcall screensaver-image nil)
+					      x id width height
+					      (lambda ()
+						event-triggered)))))
 	    (while (not event-triggered)
 	      (sleep-for 0.1)
 	      ;; Allow updating every fifth second.
