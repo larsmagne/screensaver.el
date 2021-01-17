@@ -210,10 +210,11 @@ The function should return non-nil if it changed anything."
 			 (zerop (mod (incf times) 50)))
 		(when-let ((file (funcall screensaver-image
 					  (- (float-time) start))))
-		  (screensaver--display-image
-		   file x id width height
-		   (lambda ()
-		     event-triggered)))))))
+		  (when (file-exists-p file)
+		    (screensaver--display-image
+		     file x id width height
+		     (lambda ()
+		       event-triggered))))))))
       (xcb:disconnect x)))
   (screensaver-stop)
   (screensaver--schedule))
