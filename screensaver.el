@@ -108,13 +108,14 @@ The function should return non-nil if it changed anything."
 (defun screensaver--schedule ()
   "Compute the first likely time that screen saving can happen."
   (let ((idle (plist-get (screensaver--get-idle) :idle)))
-    (if (>= (/ idle 1000) screensaver--timeout)
-	;; We've already been activated.
-	(unless (get-buffer "*screensaver*")
-	  (ignore-errors (screensaver--activate)))
-      (setq screensaver--timer
-	    (run-at-time (- screensaver--timeout (/ idle 1000)) nil
-			 'screensaver--schedule)))))
+    (when (>= (/ idle 1000) screensaver--timeout)
+      ;; We've already been activated.
+      (unless (get-buffer "*screensaver*")
+	(ignore-errors (screensaver--activate))))
+    (screensaver-stop)
+    (setq screensaver--timer
+	  (run-at-time (- screensaver--timeout (/ idle 1000)) nil
+		       'screensaver--schedule))))
 
 (defmacro screensaver--with-x (&rest body)
   `(let* ((x (xcb:connect screensaver-display))
@@ -215,9 +216,7 @@ The function should return non-nil if it changed anything."
 		     file x id width height
 		     (lambda ()
 		       event-triggered))))))))
-      (xcb:disconnect x)))
-  (screensaver-stop)
-  (screensaver--schedule))
+      (xcb:disconnect x))))
 
 (defun screensaver--display-image (file x window width height stop-callback)
   (let ((gid (xcb:generate-id x)))
