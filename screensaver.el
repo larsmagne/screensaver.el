@@ -129,9 +129,9 @@ The function should return non-nil if it changed anything."
 
 (defun screensaver--get-active-window ()
   (screensaver--with-x
-   (destructuring-bind (res err)
+   (cl-destructuring-bind (res err)
        (xcb:+request+reply x
-	   (make-instance 'xcb:GetInputFocus))
+			   (make-instance 'xcb:GetInputFocus))
      (if res
 	 (screensaver--find-real-window x (slot-value res 'focus))
        (screensaver--error (car err))))))
@@ -208,7 +208,7 @@ The function should return non-nil if it changed anything."
 	      (sleep-for 0.1)
 	      ;; Allow updating every fifth second.
 	      (when (and (> (- (float-time) start) 1)
-			 (zerop (mod (incf times) 50)))
+			 (zerop (mod (cl-incf times) 50)))
 		(when-let ((file (funcall screensaver-image
 					  (- (float-time) start))))
 		  (when (file-exists-p file)
@@ -361,17 +361,17 @@ The function should return non-nil if it changed anything."
    (when (zerop (slot-value (xcb:get-extension-data x 'xcb:screensaver)
 			    'present))
      (error "No screensaver present in the X server"))
-   (destructuring-bind (res err)
+   (cl-destructuring-bind (res err)
        (xcb:+request+reply x
-           (make-instance 'xcb:screensaver:QueryInfo
-			  :drawable root))
+			   (make-instance 'xcb:screensaver:QueryInfo
+					  :drawable root))
      (if res
 	 (list :idle (slot-value res 'ms-since-user-input))
        (screensaver--error (car err))))))
 
 (defun screensaver--error (error)
-  (loop for slot in (object-slots error)
-	collect (cons slot (slot-value error slot))))
+  (cl-loop for slot in (object-slots error)
+	   collect (cons slot (slot-value error slot))))
 
 (defun screensaver--get-color (name)
   "Return the value of the color specified by NAME."
